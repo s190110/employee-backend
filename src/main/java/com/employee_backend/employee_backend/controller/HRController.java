@@ -1,6 +1,8 @@
 package com.employee_backend.employee_backend.controller;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -83,43 +85,64 @@ public class HRController {
     }
     
     @PutMapping("employees/{id}")
-    public ResponseEntity<Employee> updateEmployee(@PathVariable Long id,@Valid @RequestBody Employee employeeDetails) {
+    public ResponseEntity<Employee> updateEmployee(@PathVariable Long id, @Valid @RequestBody Employee employeeDetails) {
+        System.out.println("Updating Employee ID: " + id);
+        System.out.println("Received data: " + employeeDetails);
+
         Employee existingEmployee = employeeRepo.findById(id)
                 .orElseThrow(() -> new RuntimeException("Employee not found with id " + id));
 
-        // Update basic fields
-        existingEmployee.setFirstName(employeeDetails.getFirstName());
-        existingEmployee.setLastName(employeeDetails.getLastName());
-        existingEmployee.setGender(employeeDetails.getGender());
-        existingEmployee.setDateOfBirth(employeeDetails.getDateOfBirth());
-        existingEmployee.setAge(employeeDetails.getAge());
-        existingEmployee.setDateOfJoined(employeeDetails.getDateOfJoined());
-        existingEmployee.setAddress(employeeDetails.getAddress());
-        existingEmployee.setHasExperience(employeeDetails.getHasExperience());
-        existingEmployee.setTotalExperience(employeeDetails.getTotalExperience());
-        existingEmployee.setPhoto(employeeDetails.getPhoto());
+        try {
+            // ✅ Update Skills
+            List<Skill> fullSkills = employeeDetails.getSkills().stream()
+                    .map(s -> skillRepo.findById(s.getId())
+                            .orElseThrow(() -> new RuntimeException("Skill not found: " + s.getId())))
+                    .collect(Collectors.toList());
+            existingEmployee.setSkills(fullSkills);
 
-        // Update Wing
-        Wing wing = wingRepo.findById(employeeDetails.getWing().getId())
-                .orElseThrow(() -> new RuntimeException("Wing not found"));
-        existingEmployee.setWing(wing);
+            // ✅ Update basic fields
+            existingEmployee.setFirstName(employeeDetails.getFirstName());
+            existingEmployee.setLastName(employeeDetails.getLastName());
+            existingEmployee.setGender(employeeDetails.getGender());
+            existingEmployee.setDateOfBirth(employeeDetails.getDateOfBirth());
+            existingEmployee.setAge(employeeDetails.getAge());
+            existingEmployee.setDateOfJoined(employeeDetails.getDateOfJoined());
+            existingEmployee.setAddress(employeeDetails.getAddress());
+            existingEmployee.setHasExperience(employeeDetails.getHasExperience());
+            existingEmployee.setTotalExperience(employeeDetails.getTotalExperience());
+            existingEmployee.setPhoto(employeeDetails.getPhoto());
 
-        // Update Position
-        Position dept = positionRepo.findById(employeeDetails.getPosition().getId())
-                .orElseThrow(() -> new RuntimeException("Position not found"));
-        existingEmployee.setPosition(dept);
+            // ✅ Update Wing
+            Wing wing = wingRepo.findById(employeeDetails.getWing().getId())
+                    .orElseThrow(() -> new RuntimeException("Wing not found"));
+            existingEmployee.setWing(wing);
 
-        // Clear existing experiences and set new ones
-        existingEmployee.getExperiences().clear(); // This should work if experiences is mutable
-        if (employeeDetails.getExperiences() != null) {
-            for (Experience exp : employeeDetails.getExperiences()) {
-                exp.setEmployee(existingEmployee);
-                existingEmployee.getExperiences().add(exp);
+            // ✅ Update Position
+            Position dept = positionRepo.findById(employeeDetails.getPosition().getId())
+                    .orElseThrow(() -> new RuntimeException("Position not found"));
+            existingEmployee.setPosition(dept);
+
+            // ✅ Safely update experiences (without replacing the list)
+            List<Experience> updatedExps = new ArrayList<>();
+            if (employeeDetails.getExperiences() != null) {
+                for (Experience exp : employeeDetails.getExperiences()) {
+                    exp.setEmployee(existingEmployee);
+                    updatedExps.add(exp);
+                }
             }
+
+            existingEmployee.getExperiences().clear();               // clear the old ones
+            existingEmployee.getExperiences().addAll(updatedExps);   // add new ones
+
+        } catch (Exception e) {
+            e.printStackTrace(); // log the error
+            throw new RuntimeException("Failed to update employee: " + e.getMessage());
         }
 
         Employee updatedEmployee = employeeRepo.save(existingEmployee);
         return ResponseEntity.ok(updatedEmployee);
     }
+
+
 
 }
